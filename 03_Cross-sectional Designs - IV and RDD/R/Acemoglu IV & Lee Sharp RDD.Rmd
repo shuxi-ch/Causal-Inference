@@ -1,0 +1,343 @@
+---
+title: 'Problem set #3'
+output: pdf_document
+date: "2025-03-13"
+---
+
+Packages Used:
+```{r}
+pacman::p_load(tidyverse,gt,foreign,knitr,webshot2,
+               reshape2,viridis,ggthemes,stargazer,texreg,
+               sandwich,modelsummary,Rmisc,neatStats,gmodels, dplyr, tidyr)
+```
+
+## Load and Inspect the Data
+```{r}
+df_ajr <- read.dta("ajr_data.dta")
+```
+
+check NA 
+```{r}
+table(is.na(df_ajr$column_name))
+```
+
+check NA 
+```{r}
+head(df_ajr, 6)
+```
+
+## Setup and naive OLS
+**Assuming that their empirical strategy is valid, draw a simple DAG to represent the instrumental variables approach used by AJR. Include a hypothetical unobserved confounder that creates a back-door path between treatment and outcome. Why is it important to include this hypothetical unobserved confounder? What phenomena might the unobserved confounder represent?**
+The reason why to include this confounder is that we can never prove there's no hidden factors that would not affect the outcome variable. In this case, U could be cultural norms, ethnicity, geographical resources...etc that would also shape institutions and long-run economic growth. And it's important to consider these and examine if they're correlated with.
+```{r}
+library(ggdag)
+library(dagitty)
+
+dag <- dagitty("dag {
+  Z -> D -> Y
+  U -> D
+  U -> Y
+}")
+
+ggdag(dag, text = TRUE) + theme_dag()
+```
+
+
+**We will now replicate the main specifications from AJR. Using OLS, estimate the effect of avexpr on loggp95 in two ways, without using instrumental variables regression. First, estimate a linear regression with loggp95 as the dependent variable, and avexpr as the lone regressor (do not include any other covariates). Second, do the same but include, linearly and additively, lat_abst, africa , asia , and other. Present the results in a table, including HC2 robust standard errors. Interpret the direction and statistical significance of the estimates. Why should we be concerned about whether these are good estimates of the causal quantity of interest? Broadly, are these concerns issues of “estimation” or “identification”?**
+There may be unobserved factors that influence both institutions and economic outcomes, leading to biased estimates. The concern with these estimates is whether they truly reflect a causal relationship between institutions and economic development, or if they are simply capturing correlations driven by other factors.This is a problem of identification, because if it was not isolate the exogenous variation in institutions by using IV, then the result can not be interpreted as causal or we can not attribute the detected effect to institutions.
+```{r}
+library(lmtest)
+library(sandwich)
+library(stargazer)
+
+# without other covariates
+md_1 <- lm(logpgp95 ~ avexpr, data = df_ajr)
+md_2 <- lm(logpgp95 ~ avexpr + lat_abst + africa + asia + other, data = df_ajr)
+
+robust_se1 <- coeftest(md_1, vcov = vcovHC(md_1, type = "HC2"))
+robust_se2 <- coeftest(md_2, vcov = vcovHC(md_2, type = "HC2"))
+
+stargazer(md_1, md_2,
+          type = "text",
+          se = list(robust_se1[,2], robust_se2[,2]),
+          omit.stat = c("f", "ser")
+)
+```
+
+
+## IV estimates
+**Now, again using OLS, estimate the effect of logem4 on loggp95 . First, estimate a linear regression with loggp95 as the dependent variable, and logem4 as the lone regressor (do not include any other covariates). Second, do the same but include, linearly and additively, lat_abst, africa , asia , and other . Present the results in a table, including HC2 robust standard errors. Interpret the direction and statistical significance of the estimate of the causal effect. What does this “reduced form” estimator purport to estimate? Under what conditions can we interpret this result as causal?**
+
+The table shows a strong negative relationship between settler mortality and economic growth. Higher historical mortality rates are associated with lower modern economic development. This is aligned with AJR’s argument, although the effect weakens with controls. It captures the total impact of settler mortality on GDP, including both institutional and non-institutional channels, but it doesn't directly estimate the effect of institutions. In order to interpret them as causal, settler mortality must be exogenous, affecting GDP only through institutions. And of course, SUTVA is a must. If this holds, it serves as a valid instrument; otherwise, the estimate may reflect multiple influences beyond institutions.
+\textcolor{red}{Originally, I didn't mention SUTVA, the fundamental assumption.}
+```{r}
+md_3 <- lm(logpgp95 ~ logem4, data = df_ajr)
+md_4 <- lm(logpgp95 ~ logem4 + lat_abst + africa + asia + other, data = df_ajr)
+
+robust_se3 <- coeftest(md_3, vcov = vcovHC(md_3, type = "HC2"))
+robust_se4 <- coeftest(md_4, vcov = vcovHC(md_4, type = "HC2"))
+
+stargazer(md_3, md_4,
+          type = "text",
+          se = list(robust_se3[,2], robust_se4[,2]),
+          omit.stat = c("f", "ser")
+)
+```
+
+
+**Use instrumental variables regression to estimate the (Conditional) Local Average Treatment Effect (LATE) of avexpr on loggp95, using logem4 as the instrument for avexpr. You may use any function or package of your choice. As before, first include no covariates, and second include linearly and additively lat_abst, africa, asia, and other.**
+```{r}
+library(AER)
+
+iv_1 <- ivreg(logpgp95 ~ avexpr | logem4, data = df_ajr)
+iv_2 <- ivreg(logpgp95 ~ avexpr + lat_abst + africa + asia + other | logem4 + lat_abst + africa + asia + other, data = df_ajr)
+
+robust_iv1 <- coeftest(iv_1, vcov = vcovHC(iv_1, type = "HC2"))
+robust_iv2 <- coeftest(iv_2, vcov = vcovHC(iv_2, type = "HC2"))
+
+stargazer(iv_1, iv_2,
+          type = "text",
+          se = list(robust_iv1[,2], robust_iv2[,2]),
+          omit.stat = c("f", "ser")
+)
+```
+
+
+**Report and interpret the F-statistic from a test for weak instrumentation based on the models above. What do you find?**
+The weak instrument test reports an F-statistic of 22.95 in the model without covariates, which exceeds the conventional threshold of 10. This suggests that logem4 is a strong instrument in this specification and is unlikely to suffer from weak instrument bias.
+
+However, once covariates are added, the F-statistic drops to 3.46, falling well below the threshold. This raises concerns about weak instrumentation in the model with covariate adjustment. In this case, the instrument may no longer provide sufficient variation in avexpr once we control for geographic and regional variables, which compromises the reliability of the IV estimates.
+
+\textcolor{red}{Initially, I misunderstood the question, creating a separate first-stage regression using lm(avexpr ~ logem4). But the question asks for the F-statistic from a test for weak instrumentation based on the models above, meaning I just need to retrieve the relevant F-statistics directly from the IV models.}
+```{r}
+f_iv1 <- summary(iv_1, diagnostics = TRUE)$diagnostics["Weak instruments", "statistic"]
+f_iv2 <- summary(iv_2, diagnostics = TRUE)$diagnostics["Weak instruments", "statistic"]
+
+stargazer(iv_1, iv_2,
+          type = "text",
+          se = list(robust_iv1[,2], robust_iv2[,2]),
+          omit.stat = c("f", "ser"),
+          add.lines = list(
+            c("Weak IV F-statistic", round(f_iv1, 2), round(f_iv2, 2))
+          ),
+          title = "IV Regression Results with Robust SEs and Weak IV F-tests")
+```
+
+
+## Regression Discontinuity Designs
+
+### Load and Inspect the Data
+```{r}
+df_lee <- read.dta("lee.dta", convert.factors = FALSE)
+```
+
+check NA 
+```{r}
+table(is.na(df_lee$column_name))
+```
+
+check NA 
+```{r}
+head(df_lee, 6)
+```
+
+### Setup
+
+Create the following three variables:
+- share_t: Vote share in the current election (candidate’s vote share divided by the total number of votes). This is your dependent variable.
+- margin_tm1: Party’s vote margin in the previous election. This is your “forcing” variable representing the party’s share of votes cast for the top two candidates in the previous election.
+Adjust so that the cutpoint lies at 50%.
+- incumbent: A binary “treatment” indicator that takes ‘1’ if the party won the previous election
+and ‘0’ if the party did not win. Assume that the candidate with the most votes always wins.
+```{r}
+df_lee$share_t <- df_lee$origvote / df_lee$totvote
+df_lee$margin_tm1 <- (df_lee$origvote - df_lee$sechighestvote) / (df_lee$origvote + df_lee$sechighestvote) * 100
+df_lee$incumbent <- ifelse(df_lee$origvote > df_lee$sechighestvote, 1, 0)
+```
+
+
+**Test that you constructed the variables correctly by creating a plot with the “treatment” (incumbent) on the y-axis and the forcing variable (margin_tm1) on the x-axis. What kind of RDD is this?**
+Sharp RDD.
+```{r}
+# Load necessary libraries
+library(ggplot2)
+
+# Scatter plot: Incumbency vs. Previous Vote Margin
+ggplot(df_lee, aes(x = margin_tm1, y = incumbent)) +
+  geom_point(alpha = 0.5) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red", size = 1) +
+  labs(title = "Incumbency vs. Vote Margin",
+       x = "Vote Margin",
+       y = "Incumbency") +
+  theme_minimal()
+
+```
+
+
+### RDD estimates
+
+Now implement the following regression specifications in R , where Y is vote share in election t, X is vote margin in election t-1, and D is incumbency. In each case, report your estimate $\hat{\beta}$ and interpret it with careful reference to the appropriate estimand. For each model, create a scatterplot of X and Y and overlay two fitted curves, one for D=0 and one for D=1.
+**$i.$ $Y = \alpha + \beta D + \gamma X + \epsilon$**
+The result suggests that winning the previous election increases a candidate's vote share in the next election by 17.3 percentage points on average. The LATE for candidates in close elections means the incumbency advantage applies specifically to those who just barely won or lost their previous race, rather than all elections in general. Small SE proves that this effect is precise and unlikely to be due to random chance.
+```{r}
+library(rdd)
+rdd_1 <- lm(share_t ~ incumbent + margin_tm1, data = df_lee)
+robust_rdd1 <- coeftest(rdd_1, vcov = vcovHC(rdd_1, type = "HC2"))
+
+beta_hat <- robust_rdd1[2,1]
+se_beta <- robust_rdd1[2,2]
+
+cat("Estimated Incumbency Effect:", round(beta_hat, 3), "\n")
+cat("SE:", round(se_beta, 3), "\n")
+
+ggplot(df_lee, aes(x = margin_tm1, y = share_t, color = factor(incumbent))) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red", size = 1) +
+  labs(title = "RDD 1",
+       x = "Vote Margin in Previous Election",
+       y = "Vote Share in Current Election") +
+  theme_minimal()
+
+```
+
+
+**$ii.$ $Y = \alpha + \beta D + \gamma X + \delta DX + \epsilon$**
+Although adding interaction term, beta remains unchanged. This means that the incumbency advantage is fairly stable across different levels of vote margin, at least within the observed range.
+```{r}
+rdd_2 <- lm(share_t ~ incumbent * margin_tm1, data = df_lee)
+robust_rdd2 <- coeftest(rdd_2, vcov = vcovHC(rdd_2, type = "HC2"))
+
+beta_hat <- robust_rdd2[2,1]
+se_beta <- robust_rdd2[2,2]
+
+cat("Estimated Incumbency Effect:", round(beta_hat, 3), "\n")
+cat("SE:", round(se_beta, 3), "\n")
+
+ggplot(df_lee, aes(x = margin_tm1, y = share_t, color = factor(incumbent))) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red", size = 1) +
+  labs(title = "RDD 2",
+       x = "Vote Margin in Previous Election",
+       y = "Vote Share in Current Election") +
+  theme_minimal()
+```
+
+
+**$iii.$ $Y = \alpha + \beta D + \gamma X + \gamma_2 X^2 + \delta DX + \delta_2 DX^2 + \epsilon$**
+This model accounts for varied effect of incumbency at different parts of the margin distribution. The beta value is slightly lower than previous models, suggesting that the linear models may have overestimated the incumbency advantage by not accounting for this nonlinearity.
+```{r}
+rdd_3 <- lm(share_t ~ incumbent * margin_tm1 + I(margin_tm1^2) + I(incumbent * margin_tm1^2), data = df_lee)
+robust_rdd3 <- coeftest(rdd_3, vcov = vcovHC(rdd_3, type = "HC2"))
+
+beta_hat <- robust_rdd3[2,1]
+se_beta <- robust_rdd3[2,2]
+
+cat("Estimated Incumbency Effect:", round(beta_hat, 3), "\n")
+cat("SE:", round(se_beta, 3), "\n")
+
+ggplot(df_lee, aes(x = margin_tm1, y = share_t, color = factor(incumbent))) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red", size = 1) +
+  labs(title = "RDD 3",
+       x = "Vote Margin in Previous Election",
+       y = "Vote Share in Current Election") +
+  theme_minimal()
+```
+
+
+**$iv.$ A local linear regression with a triangular kernel. Local linear regression works by fitting a straight line in a local data space, defined by some point $X = X_0$ and a bandwidth around $X_0$. The value of $\hat{Y}(X_0)$ at point $X = X_0$ is then evaluated, and the process is repeated for each $X_0$. The result is a smoothed conditional expectation function $E[Y \mid X]$. To implement this in \texttt{R}, use either the package \texttt{rdd}, and choose the Imbens-Kalyanamaran optimal bandwidth \textit{or} the Calonico, Cattaneo, and Titiunik (CCT) optimal bandwidth from the \texttt{rdrobust} package for the bandwidth. Report the estimate of $\beta$ and the optimal bandwidth.**
+This model focuses only on close elections. Its beta is lower than in the parametric models, suggesting that parametric models may have overestimated the incumbency advantage
+```{r}
+library(rdrobust)
+rdd_result <- rdrobust(y = df_lee$share_t, x = df_lee$margin_tm1, kernel = "triangular")
+
+beta_estimate <- rdd_result$coef[1]
+optimal_bandwidth <- rdd_result$bws[1]
+
+cat("Beta Estimae:", beta_estimate, "\n")
+cat("Optimal Bandwidth:", optimal_bandwidth, "\n")
+
+rdplot(df_lee$share_t, df_lee$margin_tm1, c = 0, binselect = "esmv", kernel = "triangular",
+       title = "Vote Share vs. Vote Margin",
+       x.label = "Vote Margin in Previous Election",
+       y.label = "Vote Share in Current Election")
+```
+
+
+**Do your results depend on the functional form of the regression? Why?**
+Yes, the results depend on the regression model used because different models make different assumptions about how vote margin affects vote share. Adding interaction terms lets incumbency effects change based on how close the previous election was.
+OLS looks at the whole dataset, which can introduce bias if the relationship isn’t the same everywhere. Local regression RDD focuses only on close elections, where the effect of incumbency is more credible. If results change a lot between models, it means the choice of regression matters, and we should check for nonlinearity to avoid misleading conclusions.
+
+
+### Robustness
+
+**For most of the previous section, you used the whole dataset to fit the model, with the exception of(iv), where you used an optimal bandwidth chosen by an algorithm. Now let’s see if the results are robust to different bandwidths around the discontinuity. Use bandwidth sizes from 0.01 to 0.3, in increments of 0.01. For each bandwith, trim the data on either side of the threshold and fit the model from (ii) on the trimmed dataset. Plot the coefficients for all bandwidth sizes with 95% confidence intervals. What do you conclude about the robustness of the results?**
+The estimated effect remains consistently around 0.13–0.14 across all bandwidth sizes. So, the incumbency advantage is not driven by specific bandwidth choices. Although a wider CI presented at very small bandwidths due to fewer observations, the overall window remain tight and do not cross zero, further proved vallidate the incumbency effect.
+```{r}
+bandwidths <- seq(0.01, 0.3, by = 0.01)
+
+beta_estimates <- c()
+lower_ci <- c()
+upper_ci <- c()
+
+for (bw in bandwidths) {
+  
+  trimmed_data <- df_lee %>% filter(abs(margin_tm1) <= bw * 100)
+
+  rdd_model <- lm(share_t ~ incumbent * margin_tm1, data = trimmed_data)
+  robust_se <- coeftest(rdd_model, vcov = vcovHC(rdd_model, type = "HC2"))
+
+  beta_hat <- robust_se[2,1]
+  beta_se <- robust_se[2,2]
+  
+  beta_estimates <- c(beta_estimates, beta_hat)
+  lower_ci <- c(lower_ci, beta_hat - 1.96 * beta_se)
+  upper_ci <- c(upper_ci, beta_hat + 1.96 * beta_se)
+}
+
+results_df <- data.frame(
+  Bandwidth = bandwidths,
+  Beta = beta_estimates,
+  Lower_CI = lower_ci,
+  Upper_CI = upper_ci
+)
+
+results_df
+```
+
+```{r}
+ggplot(results_df, aes(x = Bandwidth, y = Beta)) +
+  geom_line(color = "blue") +
+  geom_ribbon(aes(ymin = Lower_CI, ymax = Upper_CI), alpha = 0.2, fill = "blue") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(x = "Bandwidth",
+       y = "Estimated Incumbency Effect") +
+  theme_minimal()
+```
+
+**Assess the plausibility of the identification assumption for sharp RDD in this application by examining the density of the forcing variable around the cutoff. First, create a histogram of the forcing variable using bins of one percentage point. Second, conduct a formal test of the difference in density around the cutoff using the DCdensity() function in the rdd package and report the value from the test. Why is this analysis a good diagnostic for assessing the assumption? What can you say about the plausibility of the assumption in this case?**
+From the histogram, we've seen that it's not smooth around zero but rather an extreme spike at the cutoff. The McCrary test validated that there's manipulation or sorting at the cutoff.
+The p-value is very small, meaning there's a significant discontinuity in the distribution of vote margins at 0%, and confirming that the RDD identification assumption is violated.
+```{r}
+ggplot(df_lee, aes(x = margin_tm1)) +
+  geom_histogram(binwidth = 1, color = "black", fill = "lightblue", alpha = 0.7) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red", size = 1) +
+  labs(x = "Vote Margin",
+       y = "Frequency") +
+  theme_minimal()
+```
+
+```{r}
+DCdensity(df_lee$margin_tm1, cutpoint = 0)
+```
+
+**What does the RDD identification assumption have to say about how the officeexp variable should look near the threshold? You do not need to actually implement this test. Hypothetically, if an observed covariate failed to behave as expected, how would that the interpretation of your results be affected? Would your results necessarily be invalidated?**
+The RDD assumption predicts that officeexp should be continuous at the cutoff. If it's not and rather it jumps at the cutoff, this suggests that incumbents and non-incumbents were already different before treatment, which could indicate sorting, manipulation, or omiunobserved variable bias. This would raise concerns about whether incumbency is truly random near the threshold. If the imbalance is small and explainable, results may still be valid but require additional robustness checks.
+
+
+
+
+

@@ -1,0 +1,371 @@
+---
+title: "[corrected]0207_Shuxi Chen_Problem Set 1"
+output:
+  pdf_document: default
+  html_document: default
+date: "2025-02-07"
+---
+
+Packages Used:
+```{r}
+pacman::p_load(tidyverse,gt,foreign,knitr,webshot2,
+               reshape2,viridis,ggthemes,stargazer,texreg,
+               sandwich,modelsummary,Rmisc,neatStats,gmodels, dplyr, tidyr)
+```
+
+
+# Lab experiment
+### Load and Inspect the Data
+```{r}
+df_game <- read.csv("incumbentGame.csv")
+```
+
+### check NA 
+```{r}
+table(is.na(df_game$column_name))
+```
+
+## 1. The estimated expectation
+•	What is the estimated expectation of kept conditional on type and late.luck? Answer using a 2x2 table like the one below.
+```{r}
+# "kept" means of each combination of "type" and "late.luck"
+mean_table <- tapply(df_game$kept, list(df_game$type, df_game$late.luck), mean, na.rm = TRUE)
+
+# reshape to 2x2
+result_table <- as.data.frame.matrix(mean_table)
+
+colnames(result_table) <- c("Not Lucky", "Lucky") 
+rownames(result_table) <- c("Low", "High")
+
+result_table
+```
+
+## 2. OLS
+•	You try showing the result to your friends, but they complain that two-way tables aren’t fancy enough for social scientists. Instead, regress kept on the other two variables (and a constant term) using OLS and report the results in a table of coefficients and standard errors.
+```{r}
+reg <- lm(kept ~ late.luck + type, data = df_game)
+
+# HC2 robust SE
+hc2_vcov <- vcovHC(reg, type = "HC2")
+robust_se <- sqrt(diag(hc2_vcov)) 
+
+# coefficient
+coefficient <- summary(reg)$coef[, "Estimate"]
+
+# making them into a table
+result_table <- data.frame(
+  Coefficient = coefficient,
+  HC2_SE = robust_se,
+  row.names = rownames(summary(reg)$coef)
+)
+
+result_table
+```
+
+```{r}
+library(estimatr)
+lm_robust(kept ~ late.luck + type, data = df_game)
+```
+
+## 3. recover the estimated conditional expectations
+•	Can you recover the estimated conditional expectations in your first table from the regression output? Explain how.
+
+Yes, as the dummy basis have been set as “Not Lucky (late.luckFALSE)” and “Low (typeFALSE)”, so we can extrapolate the expected values for 4 combinations:
+	Low + Not Lucky: $\beta_0$=0.5576
+	Low + Lucky: ${\beta_0\ +\ \beta}_1$=0.6185
+	High + Not Lucky: ${\beta_0\ +\beta}_2$=0.7485
+	High + Lucky: ${\beta_0\ +\beta}_1+\ \beta_2$=0.8094
+
+
+## 4 model with interaction term
+•	In what way is your regression specification not as flexible as it could be? Amend the specification in light of your answer. Fit the new model and report the results in a regression table, then briefly describe any new inferences that you can draw.
+
+The interpretation of the coefficients in the model, “holding other variables constant, increasing one unit of A will change the target by X amount”, relies on the assumption that late.luck and kept are independent, meaning a change in one does not affect the other. But f the allocator is a high type, the effect of luck might be stronger because high-type allocators are more likely to generate high payments. This suggests that a potential interaction effect could exist, even though participants were unaware of the true types of allocators.
+
+Another limitation is the assumption of linearity in the relationship between variables. In reality, the relationship might be nonlinear. In such cases, using more flexible models like Random Forest or Gradient Boosting could better capture these complexities.
+
+To simplify, I’ve added an interaction term to the model to increase its flexibility while still maintaining interpretability.
+
+The interaction term is not statistically significant. While the effect of being "Lucky" is smaller compared to the first-order model, the effect of having a “High-type” allocator remains statistically significant in both models. This means that participants may not be as influenced by recent performance as initially hypothesized. Instead, they rely more on the general performance of the allocator than on the luck factor in the last four rounds. And the relationship between "luck" and "kept" appears to be independent of the allocator type.
+
+```{r}
+lm_robust(kept ~ late.luck * type, data = df_game)
+```
+
+
+# Field experiment: Corruption in Indonesia
+### Load and Inspect the Data
+```{r}
+df_olken <- read.csv("olken_data.csv")
+```
+
+### check NA 
+```{r}
+table(is.na(df_olken$column_name))
+```
+
+### check the distribution of the data
+```{r}
+summary(df_olken)
+```
+
+## A. Balance table
+•	Using either base R or the tidyverse1 together with any table package of your choice, create a balance table. Include for each pre-treatment covariate comparisons for treated and untreated units. Report the mean and standard deviation for each covariate within each group. Also report a test, for each covariate, of the hypothesis that the difference in means between treatment conditions is zero.
+
+### step 1: Calculate the mean and SD by treatment status for each covariate
+```{r}
+vars <- df_olken %>%
+  select(head.edu, mosques, pct.poor, total.budget)
+
+# mean
+bal.mean <- aggregate(vars, 
+                      by = list(df_olken$treat.invite),
+                      function(x) mean(x, na.rm =T)
+                      )
+
+# sd
+bal.sd <- aggregate(vars, 
+                    by = list(df_olken$treat.invite),
+                    function(x) sd(x, na.rm =T)
+                    )
+
+# t-test
+diff_means_pval <- function(x) {t.test(
+  vars[df_olken$treat.invite == 1, x],
+  vars[df_olken$treat.invite == 0, x])$p.value
+  }
+
+# loop through each column index and calculates the p-value
+p_values = sapply(1:length(vars), diff_means_pval)
+```
+
+### step 2: balance table 
+```{r}
+# Create an vector to store the difference in means
+diff.means <- vector()
+
+for (i in 1:4) {
+ diff.means[i] <- 
+   mean(vars[df_olken$treat.invite == 1, i], na.rm = T) -
+ mean(vars[df_olken$treat.invite == 0, i], na.rm = T)
+}
+
+# putting the means, sds, differences, and p values all together
+bal <- rbind(bal.mean, bal.sd, c(NA, diff.means), c(NA, p_values))
+
+# Transpose the matrix and label the balance table
+bal = t(bal)
+bal = bal[-1, 1:6]
+colnames(bal) = c("Control_Mean", "Treat_Mean", "Control_SD", 
+                  "Treat_SD", "Diff_Means", "ttest_p-val")
+
+balance_table <- as_tibble(bal)
+
+# adding rownames
+balance_table <- as.data.frame(balance_table)
+
+# This looks a lot better just by using kable!
+balance_table %>%
+ mutate(Covariate = row.names(bal)) %>%
+ dplyr::select(Covariate, everything()) %>%
+ kable(type = "text")
+```
+
+### 2. Visualizing the Distrubitions of Covariates
+•	For each covariate, plot its distributions under treatment and control (side by side or overlaying). Include the plots in your write-up.
+```{r}
+# prepare the data 
+data_plot <- df_olken %>%
+  select(head.edu, mosques, pct.poor, total.budget, treat.invite) %>%
+  dplyr::mutate(id = 1:dplyr::n(),
+         treat.invite = ifelse(treat.invite == 1,"Treatment", "Control")
+         )
+
+# use pivot longer for easy plotting with facets in ggplot
+data.pivot <- data_plot %>%
+  pivot_longer(cols = 1:4, names_to = "variable")
+
+# plot the densities
+ggplot(data.pivot, aes(x = value, fill = treat.invite,
+ color = treat.invite)) +
+ geom_density(alpha = 0.5) +
+ facet_wrap(~ variable, scales = "free") +
+ theme_minimal() +
+ theme(legend.position = "bottom") # Reposition the legend to the bottom of the figure
+```
+
+### 3. the importance of checking balance
+•	With reference to your table and plots, do villages in each condition appear similar in the pre-treatment covariates? Explain the importance of checking balance in a randomized experiment and the result you typically expect to find.
+
+Yes, the mean differences between the treatment and control groups for all covariates are very small and statistically insignificant (p-value > 0.05). Plus, the distributions of all covariates are nearly identical, indicating no systematic differences in pre-treatment characteristics between the two groups. This shows that randomization was successful, achieving balance and reducing the risk of bias. So we can more confidently attribute any observed differences in the outcome to the treatment effect.
+
+### 4. F-Statistic 
+•	Regress treatment on the pre-treatment covariates and report the p-value of an omnibus F-test. What do you conclude from the results?
+
+The p-value of F-test is very high, meaning the null hypothesis is not rejected 
+($H0: {\beta_0\ =\beta}_1=\ \beta_2{{=\beta}_3\ =\beta}_4$ = 0). This confirms that the randomization process successfully ensured balance across these covariates. It validates the earlier statement that any observed differences between the groups can be attributed to the intervention rather than pre-existing disparities.
+
+```{r}
+reg <- lm(treat.invite ~ head.edu + mosques + pct.poor + total.budget, data = df_olken)
+summary(reg)
+```
+
+
+## B. Treatment effects
+### 1. calculate ATE
+•	Use the difference-in-means estimator to estimate the average treatment effect and its standard error, i.e., do not use OLS to estimate the average treatment effect.
+```{r}
+# Apply the difference in means estimator
+values <- df_olken %>% group_by(treat.invite) %>% 
+  summarize(jobs = mean(pct.missing, na.rm = T))
+
+ybar <- tapply(df_olken$pct.missing,
+ list('treated'= df_olken$treat.invite),
+ function(x) mean(x, na.rm = T)
+ )
+
+ybar['1'] - ybar['0']
+
+# Estimate the standard error of the difference in means
+df_olken_2 <- df_olken %>% 
+  select(pct.missing, treat.invite) %>% 
+  drop_na()
+
+seDiffMeans <- function(y, tx){
+ y1 = y[tx == 1]
+ y0 = y[tx == 0]
+ n1 = length(y1) # Number of observations in the  treatment group
+ n0 = length(y0) # Number of observations in the control group
+ 
+ sqrt(((var(y1) / n1 + var(y0) / n0)))
+}
+
+seDiffMeans(df_olken_2$pct.missing, df_olken_2$treat.invite)
+```
+
+### 2. Computing ATE with Bivariate OLS
+•	Now estimate the average treatment effect and its standard error using a bivariate regression of outcomes on treatment. Are the results different from before? If so, why? Make the changes necessary for them to match exactly, and explain your method.
+
+The coefficient on treat.invite in the regression is identical to the ATE obtained from the difference-in-means estimator in a bivariate regression. This is because the treatment is binary, making the coefficient mathematically equal to the difference in means.
+
+But the standard errors differ, as the SE from the regression assume homoskedasticity, meaning the variance of the outcome variable is constant within the treatment and control groups. In contrast, the standard error from the seDiffMeans function accounts for potential heteroskedasticity, providing a more reliable measure of uncertainty when variances differ across groups.
+
+```{r}
+mod.bivariate <- lm(pct.missing ~ treat.invite, data = df_olken)
+summary(mod.bivariate)
+```
+
+To match them, we can use vcovHC in the sandwich package, setting the type = "HC2"  to calculate the robust SE. The code would look like this:
+```{r}
+mod.bivariate <- lm(pct.missing ~ treat.invite, data = df_olken)
+
+# robust estimate
+se.bivariate <- sqrt(
+  diag(
+    vcovHC(
+      mod.bivariate, type = 'HC2')))
+
+options(scipen = 999) # control the use of scientific notation in numeric output
+
+stargazer(mod.bivariate, 
+          se = list(se.bivariate), 
+          digits = 8, 
+          notes = "HC2 Robust SEs", 
+          type = "text")
+```
+
+### 4. Re-estimation 
+•	Re-estimate the average treatment effect using a regression specification that includes pre-treatment covariates (additively and linearly). Report your estimates of the treatment effect and its standard error. Do you expect them to differ from the difference-in-means estimates, and do they? If so, why?
+
+Here I used a robust regression model, which employs HC2 standard errors by default when running OLS. As expected, the treatment difference in means aligns with the OLS results, assuming other covariates remain constant.
+```{r}
+reg_covariates <- lm_robust(pct.missing ~ treat.invite + head.edu + mosques + 
+                     pct.poor + total.budget, data = df_olken)
+summary(reg_covariates)
+```
+
+
+## C. Heterogeneous effects
+### 1. calculate ATE for poverty levels
+•	Estimate the ATE for villages with more than half of households below the poverty line, and then do the same for villages with less than half of households below the poverty line.
+
+\textcolor{red}{Originally, I used an OLS model to estimate the ATE, where the ATE is represented by $\beta_1$. I included villages with a poverty level of 0.5 in the "Poor" group (using >= 0.5). While my result for the "Poor" group matches the DiM-based result, the ATE for the "Rich" group is slightly larger than the DiM-based ATE. This is because $\beta_1$ (Sxx/Sxy) is a conditional-variance-weighted ATE, where larger deviations from the mean have a greater influence on the coefficient estimates. This implicitly assigns weights to observations based on their influence on the model. In contrast, DiM calculates a simple unweighted average of treatment effects. 
+**Note: Only if the treatment effect is constant across subgroups can we interpret $\beta_1$ as the ATE or ATT; otherwise, it's a conditional-variance-weighted ATE**}
+```{r}
+# > 50
+over_50 <- df_olken[df_olken$pct.poor > 0.5,]
+reg_over_50 <- lm(pct.missing ~ treat.invite, data = over_50)
+summary(reg_over_50)
+
+print("--------------------------------")
+
+# < 50
+less_50 <- df_olken[df_olken$pct.poor < 0.5,]
+reg_less_50 <- lm(pct.missing ~ treat.invite, data = less_50)
+summary(reg_less_50)
+```
+
+\textcolor{red}{DiM methods}
+```{r}
+df_olken <- df_olken %>%
+  mutate(Wealth = ifelse(pct.poor > 0.5, "Poor", "Rich"))
+
+mean_poor_treated <- mean(df_olken$pct.missing[df_olken$Wealth == "Poor" & df_olken$treat.invite == 1], na.rm = TRUE)
+mean_poor_control <- mean(df_olken$pct.missing[df_olken$Wealth == "Poor" & df_olken$treat.invite == 0], na.rm = TRUE)
+ATE_poor <- mean_poor_treated - mean_poor_control
+
+mean_rich_treated <- mean(df_olken$pct.missing[df_olken$Wealth == "Rich" & df_olken$treat.invite == 1], na.rm = TRUE)
+mean_rich_control <- mean(df_olken$pct.missing[df_olken$Wealth == "Rich" & df_olken$treat.invite == 0], na.rm = TRUE)
+ATE_rich <- mean_rich_treated - mean_rich_control
+
+
+print(paste("ATE for Poor:", ATE_poor))
+print(paste("ATE for Rich:", ATE_rich))
+```
+
+### 2. test the null hypothesis
+•	Estimate the standard error of the difference in treatment effects and test the null hypothesis that there is no difference between them. What do you conclude?
+
+\textcolor{red}{OLS methods}
+The 95% CI doesn't contain 0, indicating no significant difference in the treatment effects between villages with higher and lower poverty levels. This suggests that poverty level may not be a strong covariate influencing the intervention’s outcome.
+```{r}
+# means
+mean_over_50 <- coef(reg_over_50)["treat.invite"]
+mean_less_50 <- coef(reg_less_50)["treat.invite"]
+
+diff_mean <- mean_over_50 - mean_less_50
+
+# robust SEs
+se_over_50 <- sqrt(diag(vcovHC(reg_over_50, type = "HC2")))["treat.invite"]
+se_less_50 <- sqrt(diag(vcovHC(reg_less_50, type = "HC2")))["treat.invite"]
+
+se_both <- sqrt(se_over_50^2 + se_less_50^2)
+
+# t-test
+t_result <- diff_mean / se_both
+
+# 95% CI
+ci_lower <- diff_mean - 1.96 * se_both
+ci_upper <- diff_mean + 1.96 * se_both
+paste0(round(ci_lower, 4), ", ", round(ci_upper, 4))
+```
+
+
+\textcolor{red}{DiM methods}
+```{r}
+# mean
+diff_mean <- ATE_poor - ATE_rich
+
+se_poor <- seDiffMeans(df_olken$pct.missing[df_olken$pct.poor > .5], df_olken$treat.invite[df_olken$pct.poor > .5])
+se_rich <- seDiffMeans(df_olken$pct.missing[!df_olken$pct.poor > .5], df_olken$treat.invite[!df_olken$pct.poor > .5])
+
+se_both <- sqrt(se_poor^2 + se_rich^2)
+# t-test
+t_result <- diff_mean / se_both
+
+# 95% CI
+ci_lower <- diff_mean - 1.96 * se_both
+ci_upper <- diff_mean + 1.96 * se_both
+paste0(round(ci_lower, 4), ", ", round(ci_upper, 4))
+```
+

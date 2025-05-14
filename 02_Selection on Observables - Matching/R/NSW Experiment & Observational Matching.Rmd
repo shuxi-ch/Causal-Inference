@@ -1,0 +1,342 @@
+---
+title: "0225_Shuxi Chen_Problem Set 2"
+output:
+  pdf_document: default
+  word_document: default
+  html_document:
+    df_print: paged
+date: "2025-02-11"
+---
+
+Packages Used:
+```{r}
+pacman::p_load(tidyverse,gt,foreign,knitr,webshot2,
+               reshape2,viridis,ggthemes,stargazer,texreg,
+               sandwich,modelsummary,Rmisc,neatStats,gmodels, dplyr, tidyr)
+```
+
+
+## Experimental data
+Load and Inspect the Data
+```{r}
+df_exp <- read.dta("nsw_exper.dta")
+```
+
+check NA 
+```{r}
+table(is.na(df_exp$column_name))
+```
+
+##### Using the experimental data, obtain an unbiased estimate of the effect of NSW on 1978 earnings and its standard error.
+```{r}
+treated <- df_exp$re78[df_exp$nsw == 1]
+control <- df_exp$re78[df_exp$nsw == 0]
+
+# mean
+mean_T <- mean(treated, na.rm = TRUE)
+mean_C <- mean(control, na.rm = TRUE)
+ate <- mean_T - mean_C
+print(paste("ATE: ", ate))
+
+# standard error
+seDiffMeans <- function(y, tx){
+ y1 = y[tx == 1]
+ y0 = y[tx == 0]
+ n1 = length(y1) 
+ n0 = length(y0) 
+ 
+ sqrt(((var(y1) / n1 + var(y0) / n0)))
+}
+
+se_ate <- seDiffMeans(df_exp$re78, df_exp$nsw)
+print(paste("S.E.: ", se_ate))
+```
+
+
+##### Estimate this effect again using a linear regression that controls for age, education, race, ethnicity, marital status, employment in 1974 and earnings in 1974
+```{r}
+reg <- lm(re78 ~ . - re75 - u75 - u78, data = df_exp)
+
+# HC2 robust SE
+hc2_vcov <- vcovHC(reg, type = "HC2")
+robust_se <- sqrt(diag(hc2_vcov)) 
+
+# coefficient
+coefficient <- summary(reg)$coef[, "Estimate"]
+
+result_table <- data.frame(
+  Coefficient = coefficient,
+  HC2_SE = robust_se,
+  row.names = rownames(summary(reg)$coef)
+)
+
+result_table
+```
+
+
+##### Compare these two estimates and comment
+
+The regression estimate (1720.75) is lower than the Naive difference in means (1794.34). This is because, although randomization is theoretically balanced, there may still be some imbalances in the covariates, and regression can capture them, disentangling their effect on outcome. While there's gap, the small difference proves the success of the randomization.
+
+However, standard error is larger in the regression estimate (677.98 > 670.99), meaning that controling for those  covariates didn't reduce variance very much, which implies that the baseline differences between the two groups was clear enough (at least from these covariates), further proving the Naive estimate's reliability.
+
+## Non-experimental data
+##### Compare these two estimates and comment
+Load and Inspect the Data
+```{r}
+df_psid <- read.dta("nsw_psid_withtreated.dta")
+```
+
+check NA 
+```{r}
+table(is.na(df_psid$column_name))
+```
+
+##### Calculate the (naive) ATE of employment program on trainee’s by the same two methods you used before (controlling for the same covariates)
+Naive 
+```{r}
+treated <- df_psid$re78[df_psid$nsw == 1]
+control <- df_psid$re78[df_psid$nsw == 0]
+
+# mean
+mean_T <- mean(treated, na.rm = TRUE)
+mean_C <- mean(control, na.rm = TRUE)
+ate <- mean_T - mean_C
+print(paste("ATE: ", ate))
+
+# se
+seDiffMeans <- function(y, tx){
+ y1 = y[tx == 1]
+ y0 = y[tx == 0]
+ n1 = length(y1) 
+ n0 = length(y0) 
+ 
+ sqrt(((var(y1) / n1 + var(y0) / n0)))
+}
+
+se_ate <- seDiffMeans(df_psid$re78, df_psid$nsw)
+print(paste("S.E.: ", se_ate))
+```
+
+regression
+```{r}
+reg <- lm(re78 ~ . - re75 - u75 - u78, data = df_psid)
+
+hc2_vcov <- vcovHC(reg, type = "HC2")
+robust_se <- sqrt(diag(hc2_vcov)) 
+
+coefficient <- summary(reg)$coef[, "Estimate"]
+
+result_table <- data.frame(
+  Coefficient = coefficient,
+  HC2_SE = robust_se,
+  row.names = rownames(summary(reg)$coef)
+)
+
+result_table
+```
+
+##### Briefly but concretely describe what are you estimating? Do these methods recover the experimental results?
+Unlike the experimental sample, the PSID controls were not randomly assigned, meaning they likely differ systematically from the treated group, leading to selection bias. This is proved by the completely opposite result, where the intervention appears to lower earnings instead of improving them. Here naive ATE shows a huge negative effect (-15204.78), and while regression ATE is closer to the experimental result after controlling for observed covariates, it's still negative and thus significantly different from the true effect. So, neither of them recovers the experimental results, as the baseline differences between the two groups are not fully accounted for.
+
+##### Using the non-experimental dataset, check covariate balance in the unmatched dataset for all covariates. Your output should be in the form of a balance table. Make sure to present statistical tests of the similarity of means and similarity of distributions.
+
+\textcolor{red}{I forgot to remove "u78" here. Although my answer is correct, the balance table should not include this post-treatment variable. Including "u78" introduces bias because it is an outcome of the treatment, not a pre-treatment characteristic. Balance checks should only be performed on pre-treatment variables.}
+```{r}
+library(Matching)
+
+df_psid$nsw <- as.numeric(df_psid$nsw)
+covariates <-  setdiff(colnames(df_psid), c("nsw", "re78", "u78"))
+
+balance_table <- data.frame(Variable = character(),
+                            Treated_Mean = numeric(),
+                            Control_Mean = numeric(),
+                            TTest_p = numeric(),
+                            KS_p = numeric(),
+                            Variance_Ratio = numeric(),
+                            stringsAsFactors = FALSE)
+
+for (cov in covariates) {
+  treated <- df_psid %>% filter(nsw == 1) %>% pull(!!sym(cov))
+  control <- df_psid %>% filter(nsw == 0) %>% pull(!!sym(cov))
+  
+  mean_T <- mean(treated, na.rm = TRUE)
+  mean_C <- mean(control, na.rm = TRUE)
+  
+  treated_se <- sd(treated, na.rm = TRUE)
+  control_se <- sd(control, na.rm = TRUE)
+  
+  # t-test
+  t_test <- t.test(treated, control, var.equal = FALSE)
+  
+  # KS test
+  ks_test <- ks.test(treated, control)
+  
+  # variance ratio
+  variance_ratio <- (treated_se^2) / (control_se^2)
+
+  balance_table <- rbind(balance_table, 
+                         data.frame(Variable = cov,
+                                    Treated_Mean = mean_T,
+                                    Control_Mean = mean_C,
+                                    tTest_p = t_test$p.value,
+                                    KS_p = ks_test$p.value,
+                                    Variance_Ratio = variance_ratio))
+}
+
+print(balance_table)
+
+```
+
+##### Based on your table, which of the observed covariates seem to be the most important factors in selection into the program?
+
+Earnings in 1974 and 1975 are the most important predictors of selection into the NSW program. Their extremely low p values are telling us that treated and control groups are entirely different. This is double confirmed by the variance ratios, which are far both from 1. Unemployment status is another critical factor, with the treated group having a much higher rate of unemployment compared to the controls. This difference is proved by the low p values and high variance ratios.
+
+In terms of demographic characteristics, the table shows that those selected into the program are predominantly Black, unmarried, younger, and have lower levels of education.
+
+## Comparing propensity scores
+##### Estimate propensity scores using logistic regression for both the experimental and non-experimental data.
+\textcolor{red}{I originally used all available covariates and didn't drop "re75", "u75", and "u78". These variables should be excluded for consistency with the experimental model, and avoiding bias from post-treatment variables.}  
+```{r}
+# exp
+df_exp$nsw <- as.numeric(df_exp$nsw)
+ps_exp <- glm(nsw ~ . - re75 - u75 - u78 - re78, data = df_exp, family = binomial(link = logit))
+exp_pscore <- predict(ps_exp, type = "response")
+summary(exp_pscore)
+
+# psid
+df_psid$nsw <- as.numeric(df_psid$nsw)
+ps_psid <- glm(nsw ~ . - re75 - u75 - u78 - re78, data = df_psid, family = binomial(link = logit))
+psid_pscore <- predict(ps_psid, type = "response")
+summary(psid_pscore)
+```
+
+##### Report the distributions of propensity scores for treated and control groups. Comment on the overlap for both data sets. How do they differ and why?
+In the experimental data, there is a good amount of overlap between the treated and control groups. While they are not perfectly matched, their distributions are reasonably similar. In contrast, the PSID data shows almost complete separation, where the treated group has much higher propensity scores, while the control group is close to 0. This means that the randomization is safe and sound, whereas selection bias is witnessed in the PSID dataset (due to earnings, unemployment history, race...)
+
+```{r fig-exp-data-1, echo=FALSE, fig.cap="Experimental Data"}
+df_exp_plot <- df_exp
+df_exp_plot$pscore <- exp_pscore
+df_psid_plot <- df_psid
+df_psid_plot$pscore <- psid_pscore
+
+p1 <- ggplot(df_exp_plot, aes(x = pscore, fill = as.factor(nsw))) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Experimental Data", 
+       x = "PS", fill = "Treatment") +
+  theme_minimal()
+
+p2 <- ggplot(df_psid_plot, aes(x = pscore, fill = as.factor(nsw))) +
+  geom_density(alpha = 0.5) +
+  labs(title = "Non-Experimental Data", 
+       x = "PS", fill = "Treatment") +
+  theme_minimal()
+
+print(p1)
+print(p2)
+```
+
+## Distance matching
+##### Choose some covariates on which to match, and then do so using a package of your choice (e.g., Matching ). Briefly justify your choice of covariates. Be sure to carefully check the options available to you in the matching function. For now, find only one match for each treated unit, use the Mahalanobis distance metric to select matches, and do not use exact matching.
+Mahalanobis distance should not be used on categorical variables. So here I just chose all numerical covariates as they are all imbalanced from the balance tests we've seen earlier.
+```{r}
+match_out <- Match(Y = df_psid$re78, 
+                   Tr = df_psid$nsw, 
+                   X = df_psid[, c("age", "educ", "re74", "re75")], 
+                   M = 1, 
+                   Weight = 2,
+                   estimand = "ATT")
+```
+
+##### Apply the matching estimator to estimate the average effect of the employment program on trainee earnings i.e., the ATT. Report your estimate and standard error, as well as balance statistics for the matched data.
+```{r}
+att <- match_out$est
+se <- match_out$se
+
+cat("ATT:", att, "\n")
+cat("S.E.:", se, "\n")
+
+# check covariate balance for matched data
+MatchBalance(nsw ~ age + educ + re74 + re75, data = df_psid, match.out = match_out)
+```
+
+
+##### Re-estimate the ATT using exact matching on education, race, ethnicity and married. Report your estimate, its standard error, and produce a balance table as before. In general, do your results differ from previous results?
+The results differ significantly from the previous estimates. Mahalanobis Matching shows a positive effect, whereas Exact Matching flips the ATT negative. While exact matching perfectly balances the matched covariates, it doesn’t necessarily improve balance on other key variables, like re74 and re75, which remain imbalanced. The larger SE also hints at smaller effective sample sizes, as exact matching discards units that don’t have exact counterparts. So while it eliminates bias on the matched covariates, it may come at the cost of increased variance, leaving some selection bias unresolved.
+```{r}
+covariates <- c("age", "re74", "re75")
+exact_vars <- c("educ", "black", "hisp", "married")
+
+df_psid$nsw <- as.numeric(df_psid$nsw)
+df_psid$educ <- as.numeric(as.factor(df_psid$educ))
+df_psid$black <- as.numeric(as.factor(df_psid$black))
+df_psid$hisp <- as.numeric(as.factor(df_psid$hisp))
+df_psid$married <- as.numeric(as.factor(df_psid$married))
+
+match_out <- Match(Y = df_psid$re78, 
+                   Tr = df_psid$nsw, 
+                   X = df_psid[, c(exact_vars, covariates)], 
+                   M = 1, 
+                   exact = c(TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, FALSE), 
+                   estimand = "ATT")
+
+att <- match_out$est
+se <- match_out$se
+
+# Print results
+cat("\nATT:", att, "\n")
+cat("S.E.:", se, "\n")
+
+MatchBalance(nsw ~ age + educ + black + hisp + married + re74 + re75, data = df_psid, match.out = match_out)
+```
+
+## Propensity score matching and weighting
+##### Now let’s use the propensity scores we calculated before to match on the estimated propensity scores and obtain an estimator of the average treatment effect on the treated for the NSW program.
+
+\textcolor{red}{I originally self-transformed X into logit form using log(psid_pscore / (1 - psid_pscore)). However, Match is already designed to work with propensity scores in raw probability form, so I don't need to input X in its logit-transformed form. Passing psid_pscore directly is sufficient.
+
+By default, Match assigns equal weights, and Weight = 2 allows control units to be weighted appropriately.
+
+I didn't include these two parameters in my original answer. This is critical because, without the former, the ATT estimate could still be biased due to imperfect matching, which leads to small differences in covariates stored in the residuals. Without the latter, nearest neighbor matching risks control observations being used multiple times to match treated units without proper weighting, leading to biased estimates. That's why I got both larger ATT and S.E.}
+
+```{r}
+match_psid <- Match(
+  Y = df_psid$re78,
+  Tr = df_psid$nsw,
+  X = psid_pscore,
+  M = 1, 
+  BiasAdjust = TRUE,
+  Weight = 2,
+  estimand = "ATT"
+)
+
+att <- match_psid$est
+se <- match_psid$se
+cat("ATT:", att, "\n")
+cat("S.E.:", se, "\n")
+```
+
+
+##### Finally, use weighting on the propensity score to estimate the average effect of the treatment on the treated for the NSW program. Do your results accord with your previous findings?
+
+PSM ATT is lower than the experimental result, though still positive, and IPW ATT is even smaller. Both estimates indicate that the NSW program increased earnings, but the effect is much weaker than what the experimental data suggests. The larger standard errors suggests that there may be some potential unobserved differences between the treated and control groups, something that was already implied at by the poor overlap in propensity score distributions. The higher SE for PSM makes sense since it drops unmatched units, reducing statistical power and increasing variability.
+
+\textcolor{red}{I used a regression-based IPW approach and introduced IPW formula incorrectly. The regression approach relied on model assumptions, potentially biasing some results, and the incorrect IPW calculation made my answer even wrong}
+```{r}
+df_psid$ipw <- ifelse(df_psid$nsw == 1, 1 / psid_pscore, 1 / (1 - psid_pscore))
+
+att.est <- (1 / sum(df_psid$nsw == 1)) * 
+           sum((df_psid$re78 * (df_psid$nsw - psid_pscore)) / (1 - psid_pscore))
+
+att.est
+```
+
+
+## Reflection
+##### (No answer required, just think about it!) Under what assumptions is the ATT you estimated identified? Does matching make any identification assumption more plausible?
+
+If we want to identify ATT, we can achieve this through SOO, which is built upon conditional ignorability and common support assumptions. For the former, it means that that controlling for pre-treatment covariates can simulate an environment where treatment assignment is as good as random; for the latter, it requires that treated and control groups share similar characteristics so that each treated unit has a comparable control counterpart.
+
+Matching makes this assumption more plausible by preprocessing the data to improve balance between treated and control groups. While it helps approximate a randomized experiment, it doesn’t magically create randomization, as there will always be unobserved covariates that we can’t control for. 
+
+

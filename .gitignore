@@ -1,0 +1,6 @@
+# R history, R data, outputs
+.Rhistory
+.RData
+# macOS cruft
+.DS_Store
+
