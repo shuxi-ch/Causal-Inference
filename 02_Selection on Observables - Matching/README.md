@@ -40,8 +40,8 @@ Estimate the causal effect of the NSW employment program on 1978 earnings and as
         - Benchmarked each ATT against the RCT ATE to illustrate bias–variance trade‐offs.
    - **Results:**
      Only methods that achieve both covariate balance **and** sufficient overlap (e.g., Mahalanobis matching with strong predictors) approximate the RCT ATE—underscoring the back-door criterion’s dual requirements.
-  - **Reference:**
-    Dehejia, R. H., & Wahba, S. (1999). *Causal Effects in Nonexperimental Studies: Reevaluating the Evaluation of Training Programs*. Journal of the American Statistical Association, 94(448), 1053–1062. (https://doi.org/10.2307/2669973)
+   - **Reference:**
+     Dehejia, R. H., & Wahba, S. (1999). *Causal Effects in Nonexperimental Studies: Reevaluating the Evaluation of Training Programs*. Journal of the American Statistical Association, 94(448), 1053–1062. (https://doi.org/10.2307/2669973)
 
 ### Key Concepts
 
