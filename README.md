@@ -1,5 +1,3 @@
-# Causal Inference in Political Science
-
 ## Overview  
 This repository aggregates four self-contained causal‐inference exercises—ranging from lab experiments to longitudinal panel analysis—each in its own folder with detailed READMEs:
 
