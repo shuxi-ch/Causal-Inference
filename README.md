@@ -1,6 +1,6 @@
 # Causal Inference in Political Science
 
-## Overview  
+### Overview  
 This repository aggregates four self-contained causal‐inference exercises—ranging from lab experiments to longitudinal panel analysis—each in its own folder with detailed READMEs:
 
 1. **01_Potential outcomes & Randomized experiments**  
@@ -24,7 +24,7 @@ This repository aggregates four self-contained causal‐inference exercises—ra
    - **Focus:** Raw DiD, OLS with clustered SEs, parallel‐trends & placebo tests, within estimator, one‐ and two‐way FE.
 
 
-## Directory layout  
+### Directory layout  
 
    ```bash
    .
