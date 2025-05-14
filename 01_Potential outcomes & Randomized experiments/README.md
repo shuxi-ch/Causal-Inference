@@ -50,7 +50,3 @@ This exercises applies foundational causal‐inference methods to two classic ex
   * Import: `haven`
   * Regression & SEs: `estimatr`, `sandwich`, `lmtest`
   * Tables & reports: `modelsummary`, `gt`, `kableExtra`
-
----
-
-*This repo demonstrates the core causal‐inference workflow—from design replication to field‐evaluation—providing a blueprint for rigorous ATE estimation and diagnostic testing in both experimental and quasi‐experimental settings.*
