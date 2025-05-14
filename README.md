@@ -26,43 +26,45 @@ This repository aggregates four self-contained causal‐inference exercises—ra
 
 ## Directory layout  
 
-.
-├── .gitignore
-├── README.md
-├── 01_Potential outcomes & Randomized experiments
-│   ├── README.md
-│   ├── data
-│   │   ├── [Field Experiment]olken_data.csv
-│   │   └── [Lab Experiment]incumbentGame.csv
-│   ├── docs
-│   │   └── Lab & Field Causal Analysis: Game & Olken Audit.pdf
-│   └── R
-│       └── Lab & Field Causal Analysis: Game & Olken Audit.Rmd
-├── 02_Selection on Observables – Matching
-│   ├── README.md
-│   ├── data
-│   │   ├── nsw_exper.dta
-│   │   └── nsw_psid_withtreated.dta
-│   ├── docs
-│   │   └── NSW Experiment & Observational Matching.pdf
-│   └── R
-│       └── NSW Experiment & Observational Matching.Rmd
-├── 03_Cross-sectional Designs – IV and RDD
-│   ├── README.md
-│   ├── data
-│   │   ├── ajr_data.dta
-│   │   └── lee.dta
-│   ├── docs
-│   │   └── Acemoglu IV & Lee Sharp RDD.pdf
-│   └── R
-│       └── Acemoglu IV & Lee Sharp RDD.Rmd
-└── 04_Longitudinal Designs – DiD and Fixed Effect
-    ├── README.md
-    ├── data
-    │   ├── maleskyetal_placebo.dta
-    │   ├── maleskyetal.dta
-    │   └── wagepan_wide.csv
-    ├── docs
-    │   └── DID on Public Services & Wage Panel Estimators.pdf
-    └── R
-        └── DID on Public Services & Wage Panel Estimators.Rmd
+   ```bash
+   .
+   ├── .gitignore
+   ├── README.md
+   ├── 01_Potential outcomes & Randomized experiments
+   │   ├── README.md
+   │   ├── data
+   │   │   ├── [Field Experiment]olken_data.csv
+   │   │   └── [Lab Experiment]incumbentGame.csv
+   │   ├── docs
+   │   │   └── Lab & Field Causal Analysis: Game & Olken Audit.pdf
+   │   └── R
+   │       └── Lab & Field Causal Analysis: Game & Olken Audit.Rmd
+   ├── 02_Selection on Observables – Matching
+   │   ├── README.md
+   │   ├── data
+   │   │   ├── nsw_exper.dta
+   │   │   └── nsw_psid_withtreated.dta
+   │   ├── docs
+   │   │   └── NSW Experiment & Observational Matching.pdf
+   │   └── R
+   │       └── NSW Experiment & Observational Matching.Rmd
+   ├── 03_Cross-sectional Designs – IV and RDD
+   │   ├── README.md
+   │   ├── data
+   │   │   ├── ajr_data.dta
+   │   │   └── lee.dta
+   │   ├── docs
+   │   │   └── Acemoglu IV & Lee Sharp RDD.pdf
+   │   └── R
+   │       └── Acemoglu IV & Lee Sharp RDD.Rmd
+   └── 04_Longitudinal Designs – DiD and Fixed Effect
+       ├── README.md
+       ├── data
+       │   ├── maleskyetal_placebo.dta
+       │   ├── maleskyetal.dta
+       │   └── wagepan_wide.csv
+       ├── docs
+       │   └── DID on Public Services & Wage Panel Estimators.pdf
+       └── R
+           └── DID on Public Services & Wage Panel Estimators.Rmd
+   ```
