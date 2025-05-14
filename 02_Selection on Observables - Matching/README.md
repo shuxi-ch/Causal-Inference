@@ -14,7 +14,7 @@ Estimate the causal effect of the NSW employment program on 1978 earnings and as
   - **Results:**  
     These estimates validate the RCT’s internal validity and serve as our benchmark.  
   - **Reference:**  
-    LaLonde, R. J. (1986). *Evaluating the Econometric Evaluations of Training Programs with Experimental Data.* American Economic Review, 76(4), 604–620.  
+  LaLonde, R. J. (1986). *Evaluating the Econometric Evaluations of Training Programs with Experimental Data.* American Economic Review, 76(4), 604–620.  (https://www.jstor.org/stable/1815679)  
 
 2. **Observational Analysis (Dehejia & Wahba, 1999)**
   - **Objective:**  
@@ -38,7 +38,11 @@ Estimate the causal effect of the NSW employment program on 1978 earnings and as
        - **PS‐Matching** (NN on estimated PS): ATT = **\$1 771.8** (SE = \$1 915.1)  
        - **IPW**: ATT = **\$746.8**  
     6. **Comparative Diagnostics:**  
-       - Benchmarked each ATT against the RCT ATE to illustrate bias–variance trade‐offs.  
+       - Benchmarked each ATT against the RCT ATE to illustrate bias–variance trade‐offs.
+  - **Results:**
+    Only methods that achieve both covariate balance **and** sufficient overlap (e.g., Mahalanobis matching with strong predictors) approximate the RCT ATE—underscoring the back-door criterion’s dual requirements.
+  - **Reference:**  
+  Dehejia, R. H., & Wahba, S. (1999). *Causal Effects in Nonexperimental Studies: Reevaluating the Evaluation of Training Programs*. Journal of the American Statistical Association, 94(448), 1053–1062. (https://doi.org/10.2307/2669973)
 
 ### Key Concepts
 
