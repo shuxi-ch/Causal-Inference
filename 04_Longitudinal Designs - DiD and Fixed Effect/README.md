@@ -2,8 +2,8 @@
 
 This exercise applies difference‐in‐differences and panel‐data methods to two causal‐inference problems: 
 
-1. **DiD** – Vietnam’s 2009 re‐centralization on six public‐service indices.  
-2. **Panel Data** – Union membership’s wage premium (U.S. 1980–1987).
+- **DiD** – Vietnam’s 2009 re‐centralization on six public‐service indices.  
+- **Panel Data** – Union membership’s wage premium (U.S. 1980–1987).
    
 By combining OLS with clustered SEs, parallel‐trends checks, placebo tests, and fixed‐effects estimators, we validate causal assumptions and quantify treatment effects.
 
